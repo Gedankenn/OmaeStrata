@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.akira.omaestrata",
+  "name": "OmaeStrata",
+  "version": "0.1.0",
+  "author": "Christopher Akira",
+  "license": "MIT",
+  "description": "Monitor Strata model-server state and CPU/GPU usage over SSH.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {
+    "displayName": "OmaeStrata",
+    "description": "Strata on/off, active model, CPU load, and Tesla GPU utilization from the configured SSH host.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {"sshTarget": "akira@192.168.1.168", "refreshSeconds": 10, "strataProcessPattern": "strata"},
+    "schema": [
+      {"key":"sshTarget","type":"string","label":"SSH target","defaultValue":"akira@192.168.1.168","description":"user@host reachable with SSH keys (no interactive password prompt)."},
+      {"key":"refreshSeconds","type":"integer","label":"Refresh interval (seconds)","min":5,"max":120,"step":1,"defaultValue":10},
+      {"key":"strataProcessPattern","type":"string","label":"Strata process match","defaultValue":"strata","description":"Process name substring used to detect the running Strata server."}
+    ]
+  }
+}
