@@ -10,13 +10,21 @@ BarWidget {
   moduleName: "io.github.akira.omaestrata"
   property var snapshot: null
   property string stateText: "connecting"
-  readonly property string sshTarget: String(setting("sshTarget", "akira@192.168.1.168"))
-  readonly property int refreshSeconds: Math.max(5, Math.min(120, parseInt(setting("refreshSeconds", 10), 10) || 10))
-  readonly property string processPattern: String(setting("strataProcessPattern", "strata"))
+  property var envConfig: ({})
+  readonly property var remoteConfig: ({
+    mode: connectionMode,
+    strataRoot: Model.sanitizeRemotePath(Model.pick(envConfig, "STRATA_ROOT", "/home/akira/Strata"), "/home/akira/Strata"),
+    startScript: Model.sanitizeRemotePath(Model.pick(envConfig, "START_SCRIPT", "/home/akira/Strata/run-iq3_s.sh"), "/home/akira/Strata/run-iq3_s.sh"),
+    diskPath: Model.sanitizeRemotePath(Model.pick(envConfig, "DISK_PATH", "/"), "/")
+  })
+  readonly property string connectionMode: String(Model.preferCustom(setting("connectionMode", "ssh"), Model.pick(envConfig, "MODE", ""), "ssh")).toLowerCase() === "local" ? "local" : "ssh"
+  readonly property string sshTarget: Model.sanitizeSshTarget(Model.preferCustom(setting("sshTarget", "akira@192.168.1.168"), Model.pick(envConfig, "SSH_TARGET", ""), "akira@192.168.1.168"), "akira@192.168.1.168")
+  readonly property int refreshSeconds: Math.max(5, Math.min(120, parseInt(Model.preferCustom(setting("refreshSeconds", 10), Model.pick(envConfig, "REFRESH_SECONDS", ""), 10), 10) || 10))
+  readonly property string processPattern: String(Model.preferCustom(setting("strataProcessPattern", "strata"), Model.pick(envConfig, "PROCESS_PATTERN", ""), "strata")).replace(/[^A-Za-z0-9_.-]/g, "") || "strata"
   readonly property string label: Model.compact(snapshot, stateText, vertical)
   readonly property string tooltip: Model.tooltip(snapshot, stateText)
   readonly property string widgetLabel: Model.widgetActionLabel(snapshot, stateText, serverLaunchState, vertical)
-  readonly property string widgetActionTooltip: serverLaunchState === "starting" ? "Starting Strata over SSH" : (serverLaunchState === "error" ? "Click to retry starting Strata over SSH" : (!serverOnline ? "Click to start Strata over SSH; right-click for details; middle-click to refresh" : tooltip))
+  readonly property string widgetActionTooltip: serverLaunchState === "starting" ? (connectionMode === "local" ? "Starting Strata locally" : "Starting Strata over SSH") : (serverLaunchState === "error" ? (connectionMode === "local" ? "Click to retry starting Strata" : "Click to retry starting Strata over SSH") : (!serverOnline ? (connectionMode === "local" ? "Click to start Strata locally; right-click for details; middle-click to refresh" : "Click to start Strata over SSH; right-click for details; middle-click to refresh") : tooltip))
   property string serverLaunchState: "idle"
   property bool startRequested: false
   property var generationTokS: null
@@ -39,11 +47,47 @@ BarWidget {
     panelLoader.item.sshTarget = root.sshTarget
     panelLoader.item.refreshSeconds = root.refreshSeconds
     panelLoader.item.processPattern = root.processPattern
+    panelLoader.item.startScript = root.remoteConfig.startScript
+    panelLoader.item.connectionMode = root.connectionMode
     panelLoader.item.serverLaunchState = root.serverLaunchState
     panelLoader.item.generationTokS = root.generationTokS
     panelLoader.item.prefillTokS = root.prefillTokS
     panelLoader.item.serverLaunchError = root.serverLaunchError
   }
+  function applyEnv() {
+    var plugin = ""
+    var user = ""
+    try { plugin = pluginEnvFile.text() } catch (e) {}
+    try { user = userEnvFile.text() } catch (e) {}
+    var merged = Model.parseEnv(plugin)
+    var extra = Model.parseEnv(user)
+    for (var key in extra) merged[key] = extra[key]
+    envConfig = merged
+  }
+
+  FileView {
+    id: userEnvFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/omaestrata.env"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.applyEnv()
+    onLoadFailed: root.applyEnv()
+  }
+
+  FileView {
+    id: pluginEnvFile
+    path: {
+      var url = String(Qt.resolvedUrl(".env"))
+      return url.indexOf("file://") === 0 ? decodeURIComponent(url.slice(7)) : url
+    }
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.applyEnv()
+    onLoadFailed: root.applyEnv()
+  }
+
   function refresh() { statusProc.running = false; Qt.callLater(function() { statusProc.running = true }) }
   function startServer() {
     if (serverStartProc.running || serverOnline) return false
@@ -113,6 +157,7 @@ BarWidget {
   onPrefillTokSChanged: injectPanel()
   onServerLaunchErrorChanged: injectPanel()
   onSshTargetChanged: refresh()
+  onRemoteConfigChanged: refresh()
   Component.onCompleted: refresh()
 
   Loader {
@@ -125,7 +170,7 @@ BarWidget {
 
   Process {
     id: statusProc
-    command: Model.command(root.sshTarget, root.processPattern)
+    command: Model.command(root.sshTarget, root.processPattern, root.remoteConfig)
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -143,7 +188,7 @@ BarWidget {
 
   Process {
     id: metricsProc
-    command: Model.metricsCommand(root.sshTarget)
+    command: Model.metricsCommand(root.sshTarget, root.remoteConfig)
     stdout: SplitParser { onRead: function(line) { root.consumeMetricsLine(line) } }
     // Scan only the newest model log; the helper emits its filename/model and
     // numeric rates, never raw log content, prompts, or generated text.
@@ -161,7 +206,7 @@ BarWidget {
 
   Process {
     id: serverStartProc
-    command: Model.startCommand(root.sshTarget)
+    command: Model.startCommand(root.sshTarget, root.remoteConfig)
     stdout: SplitParser { onRead: function(line) { root.consumeServerLine(line) } }
     // Drain but never display arbitrary remote stderr; it may contain sensitive
     // request or environment details. The exit status is enough for the UI.
@@ -171,7 +216,7 @@ BarWidget {
     }
     onExited: function(exitCode) {
       root.serverLaunchState = exitCode === 0 ? "stopped" : "error"
-      root.serverLaunchError = exitCode === 0 ? "" : "SSH or Strata startup failed (exit " + exitCode + ")."
+      root.serverLaunchError = exitCode === 0 ? "" : ((root.connectionMode === "local" ? "Strata startup failed" : "SSH or Strata startup failed") + " (exit " + exitCode + ").")
       root.refresh()
     }
   }

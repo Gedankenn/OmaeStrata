@@ -196,3 +196,51 @@ test('status collector queries nvidia-smi temperature', () => {
   assert.match(remote, /temperature\.gpu/)
   assert.match(remote, /temperature/)
 })
+
+test('status collector falls back to rocm-smi and amdgpu sysfs', () => {
+  const remote = Array.from(context.command('akira@192.168.1.168', 'strata')).at(-1)
+  assert.match(remote, /rocm-smi/)
+  assert.match(remote, /gpu_busy_percent/)
+  assert.match(remote, /0x1002/)
+})
+
+test('parses dotenv assignments and ignores comments', () => {
+  const env = context.parseEnv([
+    '# comment',
+    'SSH_TARGET=user@host',
+    'STRATA_ROOT="/opt/strata"',
+    "export DISK_PATH=/",
+    'START_SCRIPT=/opt/strata/run.sh'
+  ].join('\n'))
+  assert.equal(env.SSH_TARGET, 'user@host')
+  assert.equal(env.STRATA_ROOT, '/opt/strata')
+  assert.equal(env.DISK_PATH, '/')
+  assert.equal(env.START_SCRIPT, '/opt/strata/run.sh')
+})
+
+test('commands take strata root, start script, and disk path from config', () => {
+  const cfg = { strataRoot: '/opt/s', startScript: '/opt/s/run.sh', diskPath: '/data' }
+  const status = Array.from(context.command('u@h', 'strata', cfg))
+  assert.match(status.at(-1), /OMAE_STRATA_ROOT=/)
+  assert.match(status.at(-1), /OMAE_DISK_PATH=/)
+  assert.doesNotMatch(status.at(-1), /\/home\/akira\/Strata\/strata-\*\.log/)
+  const start = Array.from(context.startCommand('u@h', cfg))
+  assert.deepEqual(start.slice(-2), ['u@h', '/opt/s/run.sh'])
+  const metrics = Array.from(context.metricsCommand('u@h', cfg))
+  assert.match(metrics.at(-1), /OMAE_STRATA_ROOT=/)
+})
+
+test('local mode runs the collector and start script without SSH', () => {
+  const cfg = { mode: 'local', strataRoot: '/opt/s', startScript: '/opt/s/run.sh', diskPath: '/data' }
+  const status = Array.from(context.command('u@h', 'strata', cfg))
+  assert.equal(status[0], 'env')
+  assert.ok(status.includes('python3'))
+  assert.ok(!status.includes('ssh'))
+  assert.ok(status.some((part) => String(part).indexOf('OMAE_STRATA_ROOT=') === 0))
+  const start = Array.from(context.startCommand('u@h', cfg))
+  assert.deepEqual(start, ['/opt/s/run.sh'])
+  const metrics = Array.from(context.metricsCommand('u@h', cfg))
+  assert.equal(metrics[0], 'env')
+  assert.ok(metrics.includes('python3'))
+  assert.ok(!metrics.includes('ssh'))
+})

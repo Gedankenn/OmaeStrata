@@ -16,6 +16,8 @@ Panel {
   property string sshTarget: "akira@192.168.1.168"
   property int refreshSeconds: 10
   property string processPattern: "strata"
+  property string startScript: "/home/akira/Strata/run-iq3_s.sh"
+  property string connectionMode: "ssh"
   property string serverLaunchState: "idle"
   property var generationTokS: null
   property var prefillTokS: null
@@ -232,7 +234,7 @@ Panel {
           leftAlign: true
           active: root.serverRunning
           enabled: !root.serverRunning && root.serverLaunchState !== "starting"
-          tooltipText: root.serverRunning ? "Strata is already running" : "SSH to " + root.sshTarget + " and run /home/akira/Strata/run-iq3_s.sh"
+          tooltipText: root.serverRunning ? "Strata is already running" : (root.connectionMode === "local" ? "Run " + root.startScript : "SSH to " + root.sshTarget + " and run " + root.startScript)
           onClicked: root.startServer()
         }
 
@@ -328,7 +330,7 @@ Panel {
         Text {
           visible: root.serverLaunchState === "error"
           width: parent.width
-          text: root.serverLaunchError || "SSH or Strata startup failed."
+          text: root.serverLaunchError || (root.connectionMode === "local" ? "Strata startup failed." : "SSH or Strata startup failed.")
           textFormat: Text.PlainText
           wrapMode: Text.Wrap
           color: Color.urgent
@@ -348,7 +350,7 @@ Panel {
         Text {
           visible: root.stateText === "error"
           width: parent.width
-          text: root.snapshot ? "SSH failed. Values above are from the last successful check." : "SSH failed. Check key-based login to " + root.sshTarget + "."
+          text: root.snapshot ? (root.connectionMode === "local" ? "Status check failed. Values above are from the last successful check." : "SSH failed. Values above are from the last successful check.") : (root.connectionMode === "local" ? "Status check failed. Confirm STRATA_ROOT and python3 on this machine." : "SSH failed. Check key-based login to " + root.sshTarget + ".")
           textFormat: Text.PlainText
           wrapMode: Text.Wrap
           color: root.dim

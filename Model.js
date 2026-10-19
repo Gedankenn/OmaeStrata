@@ -183,7 +183,7 @@ var REMOTE_PYTHON = [
   "  if m: model=os.path.basename(m.group(1)); break",
   " if not model:",
   "  m=re.search(r'([^\\s]+\\.(?:gguf|safetensors|bin))',procs[0],re.I); model=os.path.basename(m.group(1)) if m else 'Running (model not parsed)'",
-  "logs=glob.glob('/home/akira/Strata/strata-*.log')",
+  "logs=glob.glob(os.path.join(os.environ.get('OMAE_STRATA_ROOT','/home/akira/Strata'),'strata-*.log'))",
   "latest_log=max(logs,key=os.path.getmtime) if logs else ''",
   "log_model=os.path.basename(latest_log)[7:-4].upper() if latest_log else ''",
   "if log_model: model=log_model",
@@ -200,7 +200,7 @@ var REMOTE_PYTHON = [
   "except: pass",
   "disk=None",
   "try:",
-  " st=os.statvfs('/'); total=st.f_frsize*st.f_blocks; free=st.f_frsize*st.f_bavail; disk=round(100*(1-free/max(1,total)),1)",
+  " st=os.statvfs(os.environ.get('OMAE_DISK_PATH','/')); total=st.f_frsize*st.f_blocks; free=st.f_frsize*st.f_bavail; disk=round(100*(1-free/max(1,total)),1)",
   "except: pass",
   "gpus=[]; err=''",
   "try:",
@@ -208,6 +208,33 @@ var REMOTE_PYTHON = [
   " for line in out.strip().splitlines():",
   "  parts=[x.strip() for x in line.split(',')]; gpus.append({'name':parts[0],'utilization':float(parts[1]),'memoryUsed':float(parts[2]),'memoryTotal':float(parts[3]),'temperature':float(parts[4]) if len(parts)>4 else None})",
   "except Exception as e: err=str(e)[:100]",
+  "def fnum(x):",
+  " try: return float(x)",
+  " except: return None",
+  "if not gpus:",
+  " try:",
+  "  out=subprocess.check_output(['rocm-smi','--json','--showuse','--showmeminfo','vram','--showtemp','--showproductname'],stderr=subprocess.DEVNULL,text=True,timeout=5)",
+  "  data=json.loads(out)",
+  "  for v in data.values():",
+  "   if not isinstance(v,dict): continue",
+  "   used=fnum(v.get('VRAM Total Used Memory (B)')); total=fnum(v.get('VRAM Total Memory (B)'))",
+  "   gpus.append({'name':v.get('Card Series') or 'AMD GPU','utilization':fnum(v.get('GPU use (%)')),'memoryUsed':None if used is None else used/1048576.0,'memoryTotal':None if total is None else total/1048576.0,'temperature':fnum(v.get('Temperature (Sensor edge) (C)'))})",
+  "  if gpus: err=''",
+  " except Exception as e:",
+  "  if not gpus: err=str(e)[:100]",
+  "if not gpus:",
+  " try:",
+  "  for card in sorted(glob.glob('/sys/class/drm/card[0-9]')):",
+  "   dev=os.path.join(card,'device'); vp=os.path.join(dev,'vendor')",
+  "   if not os.path.exists(vp) or open(vp).read().strip()!='0x1002': continue",
+  "   def rd(n):",
+  "    p=os.path.join(dev,n); return open(p).read().strip() if os.path.exists(p) else ''",
+  "   used=fnum(rd('mem_info_vram_used')); total=fnum(rd('mem_info_vram_total'))",
+  "   temps=glob.glob(os.path.join(dev,'hwmon/hwmon*/temp1_input')); temp=fnum(open(temps[0]).read())/1000.0 if temps else None",
+  "   gpus.append({'name':'AMD GPU','utilization':fnum(rd('gpu_busy_percent')),'memoryUsed':None if used is None else used/1048576.0,'memoryTotal':None if total is None else total/1048576.0,'temperature':temp})",
+  "  if gpus: err=''",
+  " except Exception as e:",
+  "  if not gpus: err=str(e)[:100]",
   "print(json.dumps({'ok':True,'online':bool(procs),'model':model,'latestLog':os.path.basename(latest_log) if latest_log else '', 'cpu':cpu,'ram':ram,'disk':disk,'gpus':gpus,'error':err,'timestamp':time.strftime('%H:%M:%S')}))"
 ].join("\n")
 
@@ -236,7 +263,7 @@ function optionalNumberOrNull(value) {
 
 var REMOTE_METRICS_PYTHON = [
   "import glob,json,os,re,time",
-  "root='/home/akira/Strata'",
+  "root=os.environ.get('OMAE_STRATA_ROOT','/home/akira/Strata')",
   "while True:",
   " try:",
   "  files=glob.glob(os.path.join(root,'strata-*.log'))",
@@ -267,18 +294,85 @@ var REMOTE_METRICS_PYTHON = [
   " time.sleep(1)"
 ].join("\n")
 
-function metricsCommand(target) {
-  var remote = "OMAESTRATA_HELPER=1 python3 -u -c " + shellQuote(REMOTE_METRICS_PYTHON)
+function metricsCommand(target, cfg) {
+  var conf = configFrom(cfg)
+  if (conf.mode === "local") {
+    return ["env", "OMAESTRATA_HELPER=1", "OMAE_STRATA_ROOT=" + conf.strataRoot, "python3", "-u", "-c", REMOTE_METRICS_PYTHON]
+  }
+  var remote = "OMAESTRATA_HELPER=1 OMAE_STRATA_ROOT=" + shellQuote(conf.strataRoot) + " python3 -u -c " + shellQuote(REMOTE_METRICS_PYTHON)
   return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "--", String(target || "akira@192.168.1.168"), remote]
 }
 
-function startCommand(target) {
-  return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "--", String(target || "akira@192.168.1.168"), "/home/akira/Strata/run-iq3_s.sh"]
+function startCommand(target, cfg) {
+  var conf = configFrom(cfg)
+  if (conf.mode === "local") return [conf.startScript]
+  return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "--", String(target || "akira@192.168.1.168"), conf.startScript]
 }
 
-function command(target, pattern) {
-  var remote = "OMAE_STRATA_PATTERN='" + String(pattern || "strata").replace(/[^A-Za-z0-9_.-]/g, "") + "' python3 -c " + shellQuote(REMOTE_PYTHON)
+function command(target, pattern, cfg) {
+  var conf = configFrom(cfg)
+  var patternSafe = String(pattern || "strata").replace(/[^A-Za-z0-9_.-]/g, "")
+  if (conf.mode === "local") {
+    return ["env", "OMAE_STRATA_PATTERN=" + patternSafe, "OMAE_STRATA_ROOT=" + conf.strataRoot, "OMAE_DISK_PATH=" + conf.diskPath, "python3", "-c", REMOTE_PYTHON]
+  }
+  var remote = "OMAE_STRATA_PATTERN='" + patternSafe + "' OMAE_STRATA_ROOT=" + shellQuote(conf.strataRoot) + " OMAE_DISK_PATH=" + shellQuote(conf.diskPath) + " python3 -c " + shellQuote(REMOTE_PYTHON)
   return ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=4", "-o", "ServerAliveInterval=4", "-o", "ServerAliveCountMax=1", "--", String(target || "akira@192.168.1.168"), remote]
 }
 
 function shellQuote(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }
+
+function parseEnv(raw) {
+  var out = {}
+  var lines = String(raw || "").slice(0, 8192).split(/\r?\n/)
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].replace(/^\s+/, "")
+    if (!line || line.charAt(0) === "#") continue
+    if (line.indexOf("export ") === 0) line = line.slice(7)
+    var eq = line.indexOf("=")
+    if (eq < 1) continue
+    var key = line.slice(0, eq).replace(/\s+$/g, "")
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+    var val = line.slice(eq + 1).replace(/^\s+|\s+$/g, "")
+    if ((val.charAt(0) === "\"" && val.charAt(val.length - 1) === "\"") || (val.charAt(0) === "'" && val.charAt(val.length - 1) === "'")) val = val.slice(1, -1)
+    out[key] = val.replace(/[\x00-\x1f\x7f]/g, "").slice(0, 240)
+  }
+  return out
+}
+
+function pick(env, key, fallback) {
+  if (!env) return fallback
+  var value = env[key]
+  if (value === undefined || value === null || String(value) === "") return fallback
+  return String(value)
+}
+
+function preferCustom(settingVal, envVal, fallback) {
+  var setting = String(settingVal === undefined || settingVal === null ? "" : settingVal)
+  var env = String(envVal === undefined || envVal === null ? "" : envVal)
+  var def = String(fallback || "")
+  if (setting && setting !== def) return setting
+  if (env) return env
+  return setting || def
+}
+
+function sanitizeRemotePath(value, fallback) {
+  var s = String(value || "")
+  if (!s || s.charAt(0) !== "/" || s.indexOf("..") !== -1 || /[^A-Za-z0-9_./+-]/.test(s)) return fallback
+  return s.slice(0, 240)
+}
+
+function sanitizeSshTarget(value, fallback) {
+  var s = String(value || "")
+  if (!s || /[^A-Za-z0-9_.@%:-]/.test(s)) return fallback
+  return s.slice(0, 120)
+}
+
+function configFrom(cfg) {
+  cfg = cfg || {}
+  return {
+    mode: String(cfg.mode || "ssh").toLowerCase() === "local" ? "local" : "ssh",
+    strataRoot: sanitizeRemotePath(cfg.strataRoot, "/home/akira/Strata"),
+    startScript: sanitizeRemotePath(cfg.startScript, "/home/akira/Strata/run-iq3_s.sh"),
+    diskPath: sanitizeRemotePath(cfg.diskPath, "/")
+  }
+}
