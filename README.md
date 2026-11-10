@@ -1,11 +1,13 @@
-# OmaeStrata
+# OmaeStrata // Cyberpunk
 
 [![Built for Omarchy: Plugin](https://raw.githubusercontent.com/tcballard/omarchy-badges/75975e5b5bf75e7ede3764bcd2950046f7abfe2c/badges/v1/omarchy-plugin.svg)](https://github.com/tcballard/omarchy-badges)
 
 Watch a Strata LLM server from the Omarchy bar — start or stop it, see the model, tok/s, host load, and GPU stats. Works over SSH or on the same machine. NVIDIA and AMD.
 
+This is a neon-HUD fork of [OmaeStrata](https://github.com/chrisakira/OmaeStrata) by Christopher Akira: same collector and start/stop logic, cyberpunk chip and panel with rolling generation, prefill, RAM and CPU graphs. It installs under its own plugin id, so it can coexist with the original.
+
 <p align="center">
-  <img src="preview.png" alt="OmaeStrata panel: IQ3_S online, generation and prefill rates, host CPU/RAM/disk, two P100 GPUs" width="362" />
+  <img src="preview-cyberpunk.png" alt="OmaeStrata Cyberpunk design preview: STRATA online, generation and prefill rates, RAM/CPU/GPU graphs" width="362" />
 </p>
 
 ## Install
@@ -13,12 +15,12 @@ Watch a Strata LLM server from the Omarchy bar — start or stop it, see the mod
 On Omarchy 4, clone and run the installer. It asks whether Strata is local or remote, then the paths:
 
 ```sh
-git clone https://github.com/chrisakira/OmaeStrata.git
+git clone https://github.com/Gedankenn/OmaeStrata.git
 cd OmaeStrata
 ./install.sh
 ```
 
-That adds the plugin and writes `~/.config/omarchy/omaestrata.env` (existing files are copied to `.bak`). Put **OmaeStrata** on the bar if it is not there yet, then:
+That adds the plugin and writes `~/.config/omarchy/omaestrata.env` (existing files are copied to `.bak`). Put **Strata // Cyberpunk** on the bar if it is not there yet, then:
 
 ```sh
 omarchy-restart-shell
@@ -36,7 +38,7 @@ Needs Python 3 on the Strata host. SSH mode needs key-based login (`BatchMode=ye
 | Middle-click | Refresh now |
 | `R` in the panel | Refresh |
 
-The bar chip shows **▶ START** when the server is down, and **● MODEL** when it is up. The panel has **Start** and **Stop**. Stop SIGTERMs matching Strata processes (`serve/server.py --engine strata`, `strata.py serve`, or a `strata` binary) and SIGKILLs leftovers after 3s; plugin SSH/python helpers are ignored. Model identity comes from the newest `strata-*.log` filename (`strata-iq3_s.log` → `IQ3_S`). Rates are the latest completed request in that log, not a live token stream. Raw log lines, prompts, and generated text are never forwarded.
+The bar chip shows **▶ STRATA** when the server is down, and the model name plus live tok/s when it is up. The panel has **Start** and **Stop**. Stop SIGTERMs matching Strata processes (`serve/server.py --engine strata`, `strata.py serve`, or a `strata` binary) and SIGKILLs leftovers after 3s; plugin SSH/python helpers are ignored. Model identity comes from the newest `strata-*.log` filename (`strata-iq3_s.log` → `IQ3_S`). Rates are the latest completed request in that log, not a live token stream. Raw log lines, prompts, and generated text are never forwarded.
 
 ## Configure
 
@@ -59,13 +61,13 @@ The installer also accepts flags if you do not want prompts (`--mode`, `--ssh-ta
 ## Update
 
 ```sh
-omarchy plugin update io.github.akira.omaestrata
+omarchy plugin update sabinho.omaestrata
 ```
 
 ## Remove
 
 ```sh
-omarchy plugin remove io.github.akira.omaestrata
+omarchy plugin remove sabinho.omaestrata
 ```
 
 Your `omaestrata.env` is left in place.
@@ -76,4 +78,4 @@ CPU is a short host-wide `/proc/stat` sample, not process-specific. Online detec
 
 ## License
 
-[MIT](LICENSE) © 2026 Christopher Akira. Use it, fork it, ship it.
+[MIT](LICENSE) © 2026 Christopher Akira. Cyberpunk fork by sabinho. Use it, fork it, ship it.

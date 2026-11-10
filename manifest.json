@@ -1,25 +1,64 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.akira.omaestrata",
-  "name": "OmaeStrata",
-  "version": "0.1.0",
-  "author": "Christopher Akira",
+  "id": "sabinho.omaestrata",
+  "name": "Strata // Cyberpunk",
+  "version": "0.2.0",
+  "author": "sabinho (fork of Christopher Akira)",
   "license": "MIT",
-  "description": "Monitor, start, and stop the Strata model server, with CPU/GPU usage and throughput over SSH.",
-  "kinds": ["bar-widget"],
-  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "description": "Cyberpunk skin for the Strata LLM server: tok/s and RAM graphs, neon HUD.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
   "barWidget": {
-    "displayName": "OmaeStrata",
+    "displayName": "Strata // Cyberpunk",
     "description": "Strata state, CPU/GPU utilization, start/stop actions, and generation/prefill tok/s.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
-    "defaults": {"connectionMode": "ssh", "sshTarget": "akira@192.168.1.168", "refreshSeconds": 10, "strataProcessPattern": "strata"},
+    "defaults": {
+      "connectionMode": "ssh",
+      "sshTarget": "akira@192.168.1.168",
+      "refreshSeconds": 10,
+      "strataProcessPattern": "strata"
+    },
     "schema": [
-      {"key": "connectionMode", "type": "enum", "label": "Connection", "options": ["ssh", "local"], "defaultValue": "ssh", "description": "ssh talks to a remote host. local runs the collector, start script, and stop helper on this machine using STRATA_ROOT from .env."},
-      {"key": "sshTarget", "type": "string", "label": "SSH target", "defaultValue": "akira@192.168.1.168", "description": "user@host reachable with SSH keys (no interactive password prompt). Ignored in local mode."},
-      {"key":"refreshSeconds","type":"integer","label":"Refresh interval (seconds)","min":5,"max":120,"step":1,"defaultValue":10},
-      {"key":"strataProcessPattern","type":"string","label":"Strata process match","defaultValue":"strata","description":"Process name substring used to detect the running Strata server."}
+      {
+        "key": "connectionMode",
+        "type": "enum",
+        "label": "Connection",
+        "options": [
+          "ssh",
+          "local"
+        ],
+        "defaultValue": "ssh",
+        "description": "ssh talks to a remote host. local runs the collector, start script, and stop helper on this machine using STRATA_ROOT from .env."
+      },
+      {
+        "key": "sshTarget",
+        "type": "string",
+        "label": "SSH target",
+        "defaultValue": "akira@192.168.1.168",
+        "description": "user@host reachable with SSH keys (no interactive password prompt). Ignored in local mode."
+      },
+      {
+        "key": "refreshSeconds",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 5,
+        "max": 120,
+        "step": 1,
+        "defaultValue": 10
+      },
+      {
+        "key": "strataProcessPattern",
+        "type": "string",
+        "label": "Strata process match",
+        "defaultValue": "strata",
+        "description": "Process name substring used to detect the running Strata server."
+      }
     ]
   }
 }

@@ -3,8 +3,8 @@
 # this script only calls `omarchy plugin add` and writes ~/.config/omarchy/omaestrata.env.
 set -euo pipefail
 
-REPO="${OMAESTRATA_REPO:-https://github.com/chrisakira/OmaeStrata.git}"
-PLUGIN_ID="io.github.akira.omaestrata"
+REPO="${OMAESTRATA_REPO:-https://github.com/Gedankenn/OmaeStrata.git}"
+PLUGIN_ID="sabinho.omaestrata"
 ENV_FILE="${HOME}/.config/omarchy/omaestrata.env"
 PRINT_ENV=0
 SKIP_ADD=0
@@ -35,7 +35,7 @@ Usage:
   --yes         non-interactive (requires --mode and --strata-root)
 
 Remove:
-  omarchy plugin remove io.github.akira.omaestrata
+  omarchy plugin remove sabinho.omaestrata
 EOF
 }
 
